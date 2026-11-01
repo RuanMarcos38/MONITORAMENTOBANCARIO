@@ -117,3 +117,22 @@ def test_chunked_upload_rejected_before_parsing(clients):
     a,_,_=clients
     response=a.post('/api/v1/auth/login',content=(b'x'*1_000_000 for _ in range(7)),headers={'Content-Type':'application/json'})
     assert response.status_code==413
+
+def test_public_bootstrap_never_creates_human_accounts(clients,monkeypatch):
+    from sqlalchemy import delete,func
+    from app.db import User,Session,Record
+    from app.bootstrap_sources import bootstrap_public_data
+    a,b,factory=clients
+    monkeypatch.setenv('BANKGUARD_BOOTSTRAP_PUBLIC_DATA','true')
+    monkeypatch.setattr('app.bootstrap_sources.DB',factory)
+    assert bootstrap_public_data()['skipped']=='organization_already_configured'
+    with factory() as db:
+        db.execute(delete(Session))
+        db.execute(delete(User))
+        db.commit()
+    monkeypatch.setattr('app.bootstrap_sources.collect',lambda source,*args:[{'external_id':source+':fixture','source':source,'source_url':'https://api.bcb.gov.br/','value':'test-fixture-only'}])
+    result=bootstrap_public_data()
+    assert result['bcb']['connected'] and result['pncp']['connected']
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(User))==0
+        assert db.scalar(select(func.count()).select_from(Record).where(Record.org=='primary',Record.kind.in_(['contracts','indicators'])))==2

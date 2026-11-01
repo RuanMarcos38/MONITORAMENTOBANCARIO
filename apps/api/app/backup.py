@@ -116,4 +116,4 @@ if __name__=='__main__':
         source=make_url(os.environ.get('DATABASE_URL','sqlite:///./bankguard.db'))
         if target.database==source.database or not str(target.database).endswith('_restore'):
             raise SystemExit('Defina BANKGUARD_RESTORE_URL para um banco vazio com nome terminado em _restore, diferente da origem.')
-        print(json.dumps(restore_to_empty(args.path,create_engine(url))))
+        print(json.dumps(restore_to_empty(args.path,create_engine(url,hide_parameters=True))))

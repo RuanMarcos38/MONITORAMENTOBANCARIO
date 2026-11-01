@@ -63,7 +63,7 @@ def setup(body: Setup, db: Db):
     if '@' not in body.email:
         raise HTTPException(422,'E-mail inválido')
     try:
-        org=Organization(id='primary',name=body.organization,settings={'plan':'free','auto_sync':False,'auto_cases':False,'notifications':False})
+        org=Organization(id='primary',name=body.organization,settings={'plan':'free','auto_sync':True,'auto_cases':False,'notifications':False})
         db.add(org)
         user=User(org=org.id,email=body.email.lower(),password=hasher.hash(body.password),role='admin')
         db.add(user)

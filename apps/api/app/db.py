@@ -35,7 +35,7 @@ class Record(Base):
     data: Mapped[dict] = mapped_column(JSON)
     created: Mapped[str] = mapped_column(String, default=now)
 
-engine = create_engine(os.getenv('DATABASE_URL', 'sqlite:///./bankguard.db'))
+engine = create_engine(os.getenv('DATABASE_URL', 'sqlite:///./bankguard.db'), hide_parameters=True)
 DB = sessionmaker(engine, expire_on_commit=False)
 
 def database():
