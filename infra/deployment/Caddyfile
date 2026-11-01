@@ -1,0 +1,9 @@
+{$BANKGUARD_DOMAIN} {
+    handle /api/* {
+        reverse_proxy bankguard-api:8000
+    }
+    handle {
+        reverse_proxy bankguard-web:3000
+    }
+    header Strict-Transport-Security "max-age=31536000"
+}
