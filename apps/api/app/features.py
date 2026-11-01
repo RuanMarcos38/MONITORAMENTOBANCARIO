@@ -497,7 +497,9 @@ def operations(user: Actor, db: Db):
     last_tick=heartbeat.data.get('last_tick') if heartbeat else None
     status='OPERACIONAL' if last_tick and last_tick>(datetime.now(timezone.utc)-timedelta(minutes=3)).isoformat() else 'SEM SINAL'
     states=dict(db.execute(select(Job.state,func.count()).where(Job.org==user.org).group_by(Job.state)).all())
-    return {'database':'OPERACIONAL','redis':redis_status,'scheduler':status,'last_tick':last_tick,'jobs':states,'checked_at':now()}
+    backup=db.scalar(select(Record).where(Record.org=='system',Record.kind=='backup_history').order_by(Record.created.desc()).limit(1))
+    backup_state={'at':backup.created,'verified':backup.data.get('rows')==backup.data.get('verified_rows')} if backup else None
+    return {'last_backup':backup_state,'database':'OPERACIONAL','redis':redis_status,'scheduler':status,'last_tick':last_tick,'jobs':states,'checked_at':now()}
 
 
 class Consent(BaseModel):

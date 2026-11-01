@@ -136,3 +136,20 @@ def test_public_bootstrap_never_creates_human_accounts(clients,monkeypatch):
     with factory() as db:
         assert db.scalar(select(func.count()).select_from(User))==0
         assert db.scalar(select(func.count()).select_from(Record).where(Record.org=='primary',Record.kind.in_(['contracts','indicators'])))==2
+
+
+def test_initial_setup_single_use(clients,monkeypatch):
+    from sqlalchemy import delete
+    from app.db import User,Session
+    a,_,factory=clients
+    token='test-only-bootstrap-'+('b'*32)
+    monkeypatch.setenv('BANKGUARD_BOOTSTRAP_TOKEN',token)
+    with factory() as db:
+        db.execute(delete(Session))
+        db.execute(delete(User))
+        db.commit()
+    payload={'token':token,'organization':'Organização teste isolada','email':'owner@example.test','password':'owner-test-password-2026'}
+    assert a.post('/api/v1/auth/setup',json=payload).status_code==200
+    assert a.post('/api/v1/auth/setup',json=payload).status_code==409
+    assert a.post('/api/v1/auth/login',json={'email':payload['email'],'password':payload['password']}).status_code==200
+    assert a.get('/api/v1/organization').json()['settings']['auto_sync'] is True

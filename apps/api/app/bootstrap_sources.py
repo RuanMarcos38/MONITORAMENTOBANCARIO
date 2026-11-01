@@ -31,4 +31,16 @@ def bootstrap_public_data():
 
 if __name__=='__main__':
     import json
-    print(json.dumps(bootstrap_public_data(),ensure_ascii=False))
+    result=bootstrap_public_data()
+    print(json.dumps(result,ensure_ascii=False))
+    if os.getenv('BACKUP_ENABLED')=='true' and not result.get('skipped'):
+        from datetime import datetime,timezone
+        from pathlib import Path
+        from .backup import backup_to,verified_frames
+        target=Path(os.getenv('BACKUP_DIR','/data/backups'))/('initial-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'.enc')
+        meta=backup_to(target)
+        verified=sum(1 for _ in verified_frames(target))
+        with DB() as db:
+            db.add(Record(org='system',kind='backup_history',external_id=target.name,data={**meta,'verified_rows':verified}))
+            db.commit()
+        print(json.dumps({'initial_backup_verified':verified==meta['rows']}))
