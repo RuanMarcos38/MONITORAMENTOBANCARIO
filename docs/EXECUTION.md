@@ -1,38 +1,33 @@
-# Relatório de execução — 1 de novembro de 2026
+# Relatório de execução — BankGuard AI — 01/11/2026
 
-## A. GitHub
-Repositório RuanMarcos38/MONITORAMENTOBANCARIO. Estado inicial: main, commit 13c6638b826562ea8b1fb16a03bec1b57cc41b5a, somente README e .gitignore. Branch feature/bankguard-ai-platform. Arquivos implementados: apps/api (API, persistência, migração, conectores, risco, bootstrap e testes), apps/web (Next.js e estilos), Compose, configuração Caddy, CI e documentação. Commit e PR identificáveis no histórico da branch e na entrega do chat.
+## A. Repositório
 
-## B. Frontend
-Interface pt-BR com login, painel conectado, estados vazios, consulta de registros, fontes, importação CSV, abertura de caso, exportação CSV e tema escuro. Demais seções aparecem como pendentes quando não implementadas. Não há gráficos com dados artificiais. Dependências instaladas: Next 16.4.3, React 19.3.1 e TypeScript 5.9.3. Checagem de tipos aprovada localmente. Build e checagem de tipos aprovados também no GitHub Actions (execução 41276748160). E2E ainda não validado. Não há URL publicada.
+Somente RuanMarcos38/MONITORAMENTOBANCARIO. Branch feature/bankguard-ai-platform. PR https://github.com/RuanMarcos38/MONITORAMENTOBANCARIO/pull/1. Main preservada, sem merge. Código implantado e validado: 39a088ec17dd119d8714dbd444a5db3c1811d2ce. Mudanças em API, interface, testes, migrações, workers, imagem e documentação.
+
+## B. Interface
+
+Login e instalação sem senha padrão; MFA; dashboard; fontes; empresas; importações; transações; alertas; casos com histórico, anexos e PDF; usuários/convites; preferências; catálogo informativo de planos; análises; grafo documentado; auditoria; notificações internas; operações. Busca, paginação, estados vazios/erro, tema e layout móvel. Três fluxos Playwright aprovados: importação→alerta→caso→anexo→PDF; persistência de caso em celular; isolamento e bloqueio de escrita de leitor de outra organização. Sem dados fictícios no banco operacional.
 
 ## C. Backend
-FastAPI com autenticação por sessão, provisionamento local de organização/admin com TOTP, consultas isoladas por organização, importador CSV, motor de triagem e casos. Banco local SQLite destinado a testes; PostgreSQL configurado no Compose, não executado. Alembic inicial criado. Modelo de domínio utiliza envelope JSON nesta primeira fundação; não equivale ao esquema normalizado integral do pedido. Workers e scheduler não implementados. Instalação Python local sem conclusão confirmada. No GitHub Actions, os 9 testes de backend passaram em 2,74 segundos. A primeira execução revelou falha no caminho de importação do Alembic; a configuração foi corrigida. A migração SQLite passou na execução 41276935224.
 
-## D. Fontes oficiais
-| Fonte | Escopo implementado | Última sincronização / registros | Estado comprovado |
-|---|---|---|---|
-| BCB https://api.bcb.gov.br/ | SGS 432, últimos 30 dias, % a.a., referência e fonte | Nenhuma sincronização validada / 0 confirmados | Código implementado; conectividade pendente |
-| PNCP https://pncp.gov.br/api/consulta/swagger-ui/index.html | Contratos publicados hoje, página 1, máximo 10 | Nenhuma sincronização validada / 0 confirmados | Cobertura parcial; homologação pendente |
-| CGU https://api.portaldatransparencia.gov.br/ | Inventário de conector | Não realizada | CREDENCIAL PENDENTE; coleta não implementada |
-| Receita https://www.gov.br/receitafederal/dados | Inventário de conector | Não realizada | Configuração e ingestão pendentes |
-| Open Finance / DICT | Estado informativo | Não realizada | Aguardando credenciamento; sem acesso bancário |
+FastAPI/SQLAlchemy, PostgreSQL e migrações 001/002. Argon2, sessões revogáveis, TOTP cifrado, RBAC por organização, limite de requisição/importação, verificação de origem, anexos cifrados e integridade. CSV e OFX/QFX. Jobs persistidos, Redis/Celery, scheduler, retentativas e recuperação. Modelo de domínio ainda usa envelope JSON por tipo; não é a normalização integral solicitada.
 
-Não há fonte com operação real comprovada nesta entrega. A documentação oficial PNCP foi consultada. O acesso ao BCB pela ferramenta de navegação falhou; isso não comprova indisponibilidade geral da API.
+## D. Fontes reais
 
-## E. Inteligência e alertas
-Motor v1 implementa duplicidade por data/valor/beneficiário e valor acima de cinco vezes a mediana em lote de ao menos dez registros. Score com fatores, versão, limitações e revisão humana. Não há alertas reais produzidos ou falsos positivos medidos. Fixtures sintéticas existem somente nos testes. Ainda faltam cruzamento de sanções e contratos, estatística de concentração, calibração, regras transacionais avançadas e explicação por modelo local.
+BCB: SGS 432, janela móvel de 30 dias, indicador agregado sem transações individuais. PNCP: contratos por publicação, janela inicial de sete dias, até cinco requisições/250 registros por execução e checkpoint; sem cobertura nacional histórica garantida. No ensaio oficial de 01/11/2026 às 08:34 de São Paulo: BCB recebeu 31, PNCP 214, total armazenado 245 em banco isolado de verificação. Isso não é contagem do banco implantado. CGU CEIS/CNEP implementada, aguardando credencial e CNPJs monitorados. Receita: ingestão pendente. Open Finance/DICT: aguardando credenciamento. Falhas preservam última coleta válida; há metadados de proveniência, hash e validade.
 
-## F. Segurança
-Implementados hash Argon2, sessões armazenadas por hash, expiração/logout, TOTP no bootstrap, validação de CSV, filtro por organização e auditoria básica. Testes cobrem login/logout, limitação de tentativas, isolamento entre organizações, controle de escrita, origem, idempotência e erro de fonte. Os 9 testes passaram no GitHub Actions. A auditoria pip-audit passou na execução 41276935224: nenhuma vulnerabilidade conhecida nas dependências Python resolvidas. Isso não equivale a revisão de segurança da aplicação. Bloqueios: segredo TOTP precisa de criptografia em repouso; auditoria precisa de proteção contra alteração e retenção; faltam revisão de segurança, varredura completa de frontend e segredos, reset de senha, gestão de membros, política completa MFA e testes de concorrência/PostgreSQL. Não utilizar dados reais antes da homologação.
+## E. Risco e alertas
 
-## G. Produção
-Não publicada. HTTPS apenas configurado via Caddy, não validado. Docker indisponível no ambiente local. Compose não executado. Backups e rollback documentados, não ensaiados. Redis preparado, sem workers. Não há monitoramento 24/7 comprovado.
+Regras determinísticas de duplicidade e valor acima de cinco vezes a mediana, mínimo de dez transações; alertas idempotentes, fatores e revisão humana. Cruzamento exato CNPJ/data entre sanção e contrato sinaliza necessidade de conferir alcance jurídico, sem conclusão criminal. Notificações internas e abertura opcional de caso. Não há ML calibrado, probabilidade de crime nem medição operacional de falsos positivos.
 
-## H. Pendências
-O prompt completo permanece em andamento. Faltam OFX/CNAB, CNAB por layout bancário, fontes CGU/Receita completas, paginação/checkpoints PNCP, snapshots de atualização, domínio normalizado, consentimentos, credenciais cifradas, webhooks assinados, notificações SMTP/WhatsApp, recuperação de filas, grafo documental, PDF, gestão de organização/usuários/planos, dashboards analíticos, retenção, anexos, observabilidade, testes E2E/acessibilidade, PostgreSQL/Redis, segurança e recuperação. Externamente: token CGU, credenciamento institucional, infraestrutura isolada e domínio. Não houve contratação ou cobrança nem envio para contatos reais.
+## F. Verificações
 
-Este relatório distingue código escrito de integração homologada. O Pull Request deve permanecer em rascunho até a revisão e os bloqueios serem resolvidos.
+CI https://github.com/RuanMarcos38/MONITORAMENTOBANCARIO/actions/runs/41318578017: seis trabalhos concluídos com sucesso, incluindo 21 testes Python, três E2E, PostgreSQL com restauração cifrada e revisão Alembic, build/typecheck frontend, imagem e configuração do supervisor como usuário da aplicação. pip-audit sem vulnerabilidades conhecidas; auditoria pnpm local também sem vulnerabilidades conhecidas. Esses resultados não substituem revisão independente de segurança. Auditoria HMAC detecta alteração de evento, mas não garante detecção de exclusão.
 
-## Evidência final de validação
-Código validado: commit 43aeed9f5b045d8499e02384502b0e0d3dd5b00d. [GitHub Actions 41276935224](https://github.com/RuanMarcos38/MONITORAMENTOBANCARIO/actions/runs/41276935224): backend e frontend aprovados; 9 testes passaram em 3,09s, migração SQLite aprovada, pip-audit sem vulnerabilidades conhecidas, typecheck e build Next.js aprovados. Há um aviso de descontinuação no TestClient sobre httpx; precisa ser acompanhado na atualização das dependências. Nenhum teste PostgreSQL, Docker, produção ou fonte real é implicado por esses resultados.
+## G. Implantação
+
+URL https://r2rmarketingdigital-monitoramentobancario.ke4n49.easypanel.host. EasyPanel r2rmarketingdigital/monitoramentobancario; PostgreSQL e Redis próprios internos, volume persistente /data. Serviço iniciou API/web/worker/scheduler. HTTPS exibiu login e instalação; /api/v1/health retornou status ok. A API recusou sessão ausente com 401. Titular deve concluir cadastro e MFA; a senha é criada por ele na página. Carga pública inicial e backup automático estão habilitados; os resultados finais no banco implantado ainda exigem conferência na tela Operações após o primeiro acesso. Não afirmar monitoramento humano 24/7 nem restauração completa da VPS. Nenhum novo serviço pago contratado.
+
+## H. Pendências delimitadas
+
+Conclusão do primeiro cadastro/MFA pelo titular e conferência dos dados operacionais; credencial CGU; ingestão Receita; CNAB; notificações externas/SMTP/WhatsApp; recuperação de senha por e-mail; modelo normalizado integral; regras avançadas/ML; cobrança e quotas completas; revisão independente de segurança/acessibilidade; cópia externa e ensaio integral de recuperação da VPS. Retenção não executa exclusão automática. Convites são links compartilháveis pelo administrador, sem envio automático. O sistema está em homologação: não declarar o prompt master integralmente concluído ou integrações institucionais homologadas.
