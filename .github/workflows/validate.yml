@@ -55,6 +55,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t bankguard:ci .
+      - name: Validate supervisor configuration as application user
+        run: docker run --rm --entrypoint /usr/bin/python3 bankguard:ci -c "from supervisor.options import ServerOptions; o=ServerOptions(); o.realize(['-c','/app/bankguard.conf']); assert len(o.process_group_configs)==5; print('Supervisor configuration readable and valid as application user')"
   official-sources:
     runs-on: ubuntu-latest
     continue-on-error: true

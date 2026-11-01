@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt && useradd --uid 10001 --crea
 COPY apps/api/ ./
 COPY --from=web --chown=bankguard:bankguard /build/.next/standalone /app/web/
 COPY --from=web --chown=bankguard:bankguard /build/.next/static /app/web/.next/static/
-COPY infra/deployment/supervisord.conf /etc/supervisor/conf.d/bankguard.conf
+COPY infra/deployment/supervisord.conf /app/bankguard.conf
 COPY infra/deployment/start.sh /app/start.sh
 RUN mkdir -p /data && chown -R bankguard:bankguard /data /app && chmod +x /app/start.sh
 USER bankguard
