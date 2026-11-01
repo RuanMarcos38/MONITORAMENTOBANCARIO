@@ -5,6 +5,8 @@ import pyotp
 from sqlalchemy import select
 from .db import DB, User
 from .main import hasher
+from .security import encrypt
+from .models import Organization
 
 def main():
     email=input('E-mail do administrador: ').strip().lower()
@@ -18,9 +20,11 @@ def main():
     with DB() as db:
         if db.scalar(select(User).where(User.email==email)):
             raise SystemExit('Usuário já existe')
-        db.add(User(org=str(uuid.uuid4()),email=email,password=hasher.hash(password),totp=secret,role='admin'))
+        org=Organization(id=str(uuid.uuid4()),name='Minha organização',settings={'auto_sync':False,'auto_cases':False})
+        db.add(org)
+        db.add(User(org=org.id,email=email,password=hasher.hash(password),totp=encrypt(secret),role='admin'))
         db.commit()
-    print('Organização e administrador criados. Proteja o banco: segredo TOTP ainda requer criptografia em repouso antes da produção.')
+    print('Organização e administrador criados. Segredo do autenticador armazenado com criptografia.')
 
 if __name__=='__main__':
     main()

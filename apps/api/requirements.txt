@@ -10,3 +10,7 @@ python-multipart>=0.0.20,<1
 pyotp>=2.9,<3
 reportlab>=4,<5
 pytest>=8,<10
+
+cryptography>=44,<50
+ofxparse>=0.21,<1
+defusedxml>=0.7,<1

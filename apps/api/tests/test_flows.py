@@ -73,7 +73,7 @@ def test_csrf_and_readonly(clients):
 
 def test_source_failure_is_truthful(clients,monkeypatch):
     a,_,_=clients
-    def fail(_):
+    def fail(*args):
         raise RuntimeError('not exposed')
     monkeypatch.setattr('app.main.collect',fail)
     assert a.post('/api/v1/sources/bcb/sync').status_code==502
@@ -84,7 +84,7 @@ def test_source_failure_is_truthful(clients,monkeypatch):
 
 def test_real_connector_shape_and_dedup(clients,monkeypatch):
     a,_,_=clients
-    monkeypatch.setattr('app.main.collect',lambda _: [{'external_id':'432:01/10/2026','value':'10.0','source':'bcb','source_url':'https://api.bcb.gov.br','reference_date':'01/10/2026'}])
+    monkeypatch.setattr('app.main.collect',lambda *args: [{'external_id':'432:01/10/2026','value':'10.0','source':'bcb','source_url':'https://api.bcb.gov.br','reference_date':'01/10/2026'}])
     assert a.post('/api/v1/sources/bcb/sync').json()['inserted']==1
     assert a.post('/api/v1/sources/bcb/sync').json()['inserted']==0
     assert len(a.get('/api/v1/records/indicators').json())==1

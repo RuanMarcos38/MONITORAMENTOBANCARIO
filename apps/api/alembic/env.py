@@ -2,6 +2,7 @@ import os
 from alembic import context
 from sqlalchemy import create_engine
 from app.db import Base
+from app import models
 
 url = os.getenv('DATABASE_URL', context.config.get_main_option('sqlalchemy.url'))
 with create_engine(url).connect() as connection:

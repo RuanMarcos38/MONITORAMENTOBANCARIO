@@ -10,7 +10,7 @@ def evaluate(rows):
     seen = set()
     results = []
     for row in rows:
-        key = (row['date'], str(row['amount']), row['beneficiary'])
+        key = (row['date'], format(Decimal(str(row['amount'])), '.2f'), row['beneficiary'].strip().casefold())
         factors = []
         if key in seen:
             factors.append({'rule': 'possible_duplicate', 'points': 50, 'reason': 'Mesma data, valor e beneficiário; verificar documentos.'})

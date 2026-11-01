@@ -28,3 +28,41 @@ jobs:
         working-directory: apps/web
       - run: pnpm typecheck && pnpm build
         working-directory: apps/web
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: bankguard
+          POSTGRES_PASSWORD: ci-only-isolated-password
+          POSTGRES_DB: bankguard_ci
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U bankguard" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://bankguard:ci-only-isolated-password@localhost:5432/bankguard_ci
+      BANKGUARD_CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r apps/api/requirements.txt
+      - run: alembic upgrade head && python -m app.pg_probe
+        working-directory: apps/api
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t bankguard:ci .
+  official-sources:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r apps/api/requirements.txt
+      - run: python -m app.source_probe
+        working-directory: apps/api

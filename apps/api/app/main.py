@@ -1,4 +1,5 @@
 import csv
+import os
 import hashlib
 import io
 import json
@@ -18,6 +19,8 @@ import pyotp
 from .db import DB, User, Session, Record, database, now
 from .connectors import SOURCES, collect
 from .risk import evaluate
+from .security import decrypt, sign
+from . import models
 
 app = FastAPI(title='BankGuard AI', version='0.1.0')
 app.add_middleware(CORSMiddleware, allow_origins=[], allow_credentials=False, allow_methods=['GET','POST'], allow_headers=['Content-Type'])
@@ -26,6 +29,8 @@ hasher = PasswordHasher()
 
 @app.middleware('http')
 async def security(request, call_next):
+    if int(request.headers.get('content-length','0'))>6_000_000:
+        return Response('Arquivo ou requisição excede 6 MB',status_code=413)
     response = await call_next(request)
     response.headers.update({'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Cache-Control':'no-store'})
     return response
@@ -38,9 +43,12 @@ def actor(request: Request, db: Db):
     user = db.get(User, session.user_id)
     if not user:
         raise HTTPException(401)
+    if os.getenv('APP_ENV')=='production' and user.role in ('admin','analyst') and not user.totp and request.url.path not in ('/api/v1/auth/me','/api/v1/auth/logout','/api/v1/auth/mfa/enroll','/api/v1/auth/mfa/confirm'):
+        raise HTTPException(403, 'Configure o autenticador para continuar')
     if request.method != 'GET':
         origin = request.headers.get('origin')
-        if origin and origin != str(request.base_url).rstrip('/'):
+        expected=os.getenv('PUBLIC_ORIGIN', str(request.base_url).rstrip('/'))
+        if origin and origin.rstrip('/') != expected.rstrip('/'):
             raise HTTPException(403, 'Origem não autorizada')
         if user.role not in ('admin','analyst'):
             raise HTTPException(403, 'Sem permissão de escrita')
@@ -55,7 +63,9 @@ def write(db, user, kind, data, external=None):
     return record
 
 def audit(db, user, action, target):
-    write(db, user, 'audit', {'actor':user.id, 'action':action, 'target':target, 'at':now()})
+    payload={'actor':user.id, 'action':action, 'target':target, 'at':now()}
+    payload['signature']=sign(payload)
+    write(db, user, 'audit', payload)
 
 class Login(BaseModel):
     email: str = Field(min_length=3, max_length=254)
@@ -76,7 +86,7 @@ def login(body: Login, request: Request, response: Response, db: Db):
         valid = hasher.verify(user.password if user else hasher.hash(secrets.token_hex(32)), body.password)
     except (VerificationError, InvalidHashError):
         pass
-    if not user or not valid or (user.totp and not pyotp.TOTP(user.totp).verify(body.otp, valid_window=1)):
+    if not user or not valid or (user.totp and not pyotp.TOTP(decrypt(user.totp)).verify(body.otp, valid_window=1)):
         db.add(Record(org='auth',kind=key,external_id=str(uuid.uuid4()),data={}))
         db.commit()
         raise HTTPException(401, 'Credenciais inválidas')
@@ -84,7 +94,7 @@ def login(body: Login, request: Request, response: Response, db: Db):
     db.add(Session(token=hashlib.sha256(token.encode()).hexdigest(), user_id=user.id, expires=(datetime.now(timezone.utc)+timedelta(hours=8)).isoformat()))
     audit(db,user,'login',user.id)
     db.commit()
-    response.set_cookie('bankguard_session',token,httponly=True,secure=request.url.scheme=='https',samesite='strict',max_age=28800,path='/')
+    response.set_cookie('bankguard_session',token,httponly=True,secure=os.getenv('APP_ENV')=='production' or request.url.scheme=='https',samesite='strict',max_age=28800,path='/')
     return {'role':user.role, 'organization':user.org}
 
 @app.post('/api/v1/auth/logout')
@@ -102,7 +112,7 @@ def health(db: Db):
 
 @app.get('/api/v1/auth/me')
 def me(user: Actor):
-    return {'email':user.email,'role':user.role,'organization':user.org}
+    return {'email':user.email,'role':user.role,'organization':user.org,'mfa':bool(user.totp),'mfa_required':os.getenv('APP_ENV')=='production' and user.role in ('admin','analyst')}
 
 @app.get('/api/v1/dashboard')
 def dashboard(user: Actor, db: Db):
@@ -114,37 +124,24 @@ def sources(user: Actor, db: Db):
     result=[]
     for source in SOURCES:
         state=db.scalar(select(Record).where(Record.org==user.org,Record.kind=='source_state',Record.external_id==source['id']))
-        result.append({**source, **(state.data if state else {})})
+        item={**source, **(state.data if state else {})}
+        if item.get('last_success') and item['last_success']<(datetime.now(timezone.utc)-timedelta(days=2)).isoformat() and item['status']=='OPERACIONAL':
+            item['status']='DESATUALIZADO'
+        if source['id']=='cgu' and not state:
+            from .models import Credential
+            if db.scalar(select(Credential).where(Credential.org==user.org,Credential.provider=='cgu')):
+                item['status']='SEM DADOS'
+        result.append(item)
     return result
 
 @app.post('/api/v1/sources/{source}/sync')
 def sync(source: str, user: Actor, db: Db):
     if user.role != 'admin':
         raise HTTPException(403)
-    if source not in ('bcb','pncp'):
-        raise HTTPException(409,'Integração pendente de implementação ou credenciamento')
-    state=db.scalar(select(Record).where(Record.org==user.org,Record.kind=='source_state',Record.external_id==source))
-    if not state:
-        state=write(db,user,'source_state',{},source)
-    try:
-        rows=collect(source)
-        inserted=0
-        for row in rows:
-            kind='indicators' if source=='bcb' else 'contracts'
-            old=db.scalar(select(Record).where(Record.org==user.org,Record.kind==kind,Record.external_id==row['external_id']))
-            if not old:
-                write(db,user,kind,{**row,'collected_at':now(),'version':1,'hash':hashlib.sha256(json.dumps(row,sort_keys=True).encode()).hexdigest()},row['external_id'])
-                inserted+=1
-        state.data={'status':'OPERACIONAL' if rows else 'SEM DADOS','last_query':now(),'last_success':now(),'received':len(rows),'inserted':inserted,'scope':'Últimos 30 dias' if source=='bcb' else 'Publicações de hoje, primeira página (máximo 10); cobertura parcial'}
-        audit(db,user,'source_sync',source)
-        db.commit()
-        return state.data
-    except Exception:
-        state.data={**state.data,'status':'INDISPONÍVEL','last_query':now(),'error':'Falha na consulta oficial; nenhum sucesso simulado.'}
-        db.commit()
-        raise HTTPException(502,'Fonte indisponível ou resposta incompatível')
+    from .synchronization import synchronize
+    return synchronize(source,user,db,collect)
 
-KINDS={'companies','contracts','sanctions','transactions','alerts','investigations','relationships','indicators','audit'}
+KINDS={'companies','contracts','sanctions','transactions','alerts','investigations','relationships','indicators','audit','notifications','reports','consents','source_snapshots'}
 
 @app.get('/api/v1/records/{kind}')
 def records(kind: str, user: Actor, db: Db, page: int=1, size: int=50, q: str=''):
@@ -155,7 +152,7 @@ def records(kind: str, user: Actor, db: Db, page: int=1, size: int=50, q: str=''
         from sqlalchemy import cast, String
         query=query.where(cast(Record.data,String).icontains(q,autoescape=True))
     rows=db.scalars(query.offset((page-1)*size).limit(size)).all()
-    return [{'id':r.id,'created':r.created,**r.data} for r in rows]
+    return [{**r.data,'source_record_id':r.external_id,'id':r.id,'created':r.created} for r in rows]
 
 class Case(BaseModel):
     title: str = Field(min_length=5,max_length=200)
@@ -197,24 +194,11 @@ async def import_csv(file: UploadFile, user: Actor, db: Db):
     raw=await file.read(2_000_001)
     if len(raw)>2_000_000:
         raise HTTPException(413,'Limite de 2 MB')
+    from .importers import parse_file
     try:
-        if not file.filename or not file.filename.lower().endswith('.csv'):
-            raise ValueError()
-        reader=csv.DictReader(io.StringIO(raw.decode('utf-8-sig')))
-        if set(reader.fieldnames or []) != {'id','date','amount','beneficiary'}:
-            raise ValueError()
-        rows=list(reader)
-        if not rows or len(rows)>10000 or len({r['id'] for r in rows}) != len(rows):
-            raise ValueError()
-        for r in rows:
-            datetime.strptime(r['date'],'%Y-%m-%d')
-            value=Decimal(r['amount'])
-            if not value.is_finite() or abs(value)>Decimal('1e15') or value.as_tuple().exponent < -2:
-                raise ValueError()
-            if not r['id'] or not r['beneficiary'] or any(len(v)>500 for v in r.values()):
-                raise ValueError()
-    except (ValueError,UnicodeError,KeyError,TypeError,InvalidOperation):
-        raise HTTPException(422,'CSV UTF-8 esperado: id,date,amount,beneficiary; data ISO e valor decimal com ponto. Lote rejeitado integralmente.')
+        rows=parse_file(file.filename or '', raw)
+    except Exception as exc:
+        raise HTTPException(422, 'Arquivo rejeitado: formato, conteúdo ou valores inválidos. Use CSV UTF-8 ou OFX/QFX.') from exc
     existing=set(db.scalars(select(Record.external_id).where(Record.org==user.org,Record.kind=='transactions')))
     for row in rows:
         if row['id'] in existing:
@@ -223,12 +207,12 @@ async def import_csv(file: UploadFile, user: Actor, db: Db):
                 raise HTTPException(409,'Identificador já utilizado com conteúdo diferente')
     fresh=[r for r in rows if r['id'] not in existing]
     for row in fresh:
-        write(db,user,'transactions',{**row,'origin':'CSV autorizado','collected_at':now()},row['id'])
-    alerts=evaluate(rows)
+        write(db,user,'transactions',{**row,'origin':'Arquivo autorizado','collected_at':now()},row['id'])
+    all_rows=[r.data for r in db.scalars(select(Record).where(Record.org==user.org,Record.kind=='transactions').order_by(Record.created,Record.external_id))]
+    alerts=evaluate(all_rows)
+    from .risk_service import publish
     for alert in alerts:
-        external='risk-v1:'+alert['transaction_id']
-        if not db.scalar(select(Record).where(Record.org==user.org,Record.kind=='alerts',Record.external_id==external)):
-            write(db,user,'alerts',alert,external)
+        publish(db,user,alert,'risk-v1:'+alert['transaction_id'])
     audit(db,user,'csv_import',{'inserted':len(fresh),'skipped':len(rows)-len(fresh)})
     db.commit()
     return {'inserted':len(fresh),'skipped':len(rows)-len(fresh),'flagged':len(alerts)}
@@ -245,3 +229,6 @@ def export(kind: str, user: Actor, db: Db):
     audit(db,user,'export',kind)
     db.commit()
     return Response(stream.getvalue(),media_type='text/csv; charset=utf-8',headers={'Content-Disposition':f'attachment; filename="bankguard-{kind}.csv"'})
+
+from .features import router as features_router
+app.include_router(features_router)
