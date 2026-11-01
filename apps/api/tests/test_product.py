@@ -111,3 +111,9 @@ def test_source_snapshot_preserves_history(clients,monkeypatch):
     assert a.post('/api/v1/sources/bcb/sync').json()['updated']==1
     snapshots=a.get('/api/v1/records/source_snapshots').json()
     assert len(snapshots)==1 and snapshots[0]['previous']['value']=='10'
+
+
+def test_chunked_upload_rejected_before_parsing(clients):
+    a,_,_=clients
+    response=a.post('/api/v1/auth/login',content=(b'x'*1_000_000 for _ in range(7)),headers={'Content-Type':'application/json'})
+    assert response.status_code==413

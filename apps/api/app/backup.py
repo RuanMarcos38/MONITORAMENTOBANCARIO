@@ -8,7 +8,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, select, inspect
+from sqlalchemy import create_engine, select, inspect, text, Table, MetaData, Column, String
 from .db import Base, engine
 from . import models
 from .security import cipher
@@ -24,6 +24,7 @@ def backup_to(path, source_engine=None):
     target.parent.mkdir(parents=True,exist_ok=True)
     encryption=cipher()
     count=0
+    schema_version=None
     digest=hashlib.sha256()
     with target.open('xb') as output:
         os.chmod(target,0o600)
@@ -32,13 +33,15 @@ def backup_to(path, source_engine=None):
         if source.dialect.name=='postgresql':
             connection=connection.execution_options(isolation_level='REPEATABLE READ')
         with connection,connection.begin():
+            if inspect(connection).has_table('alembic_version'):
+                schema_version=connection.execute(text('SELECT version_num FROM alembic_version')).scalar()
             for table in Base.metadata.sorted_tables:
                 for row in connection.execute(select(table)).mappings():
                     frame=canonical({'index':count,'table':table.name,'row':dict(row)})
                     digest.update(frame)
                     output.write(encryption.encrypt(frame)+b'\n')
                     count+=1
-        output.write(encryption.encrypt(canonical({'index':count,'end':True,'rows':count,'digest':digest.hexdigest()}))+b'\n')
+        output.write(encryption.encrypt(canonical({'index':count,'end':True,'rows':count,'digest':digest.hexdigest(),'schema_version':schema_version}))+b'\n')
         output.flush()
         os.fsync(output.fileno())
     return {'rows':count,'digest':digest.hexdigest(),'format':'BANKGUARD-BACKUP-1','created':datetime.now(timezone.utc).isoformat()}
@@ -78,10 +81,21 @@ def restore_to_empty(path,target_engine):
     count=sum(1 for _ in verified_frames(path))
     if inspect(target_engine).get_table_names():
         raise ValueError('Restauração exige um banco completamente vazio e isolado')
+    with Path(path).open('rb') as archive:
+        last=None
+        for line in archive:
+            last=line
+    footer=json.loads(cipher().decrypt(last.strip()))
+    version=footer.get('schema_version') or '002'
+    if version!='002':
+        raise ValueError('A versão do banco exige uma versão compatível da aplicação')
     with target_engine.begin() as connection:
         Base.metadata.create_all(connection)
         for frame in verified_frames(path):
             connection.execute(Base.metadata.tables[frame['table']].insert().values(**frame['row']))
+        version_table=Table('alembic_version',MetaData(),Column('version_num',String(32),primary_key=True))
+        version_table.create(connection)
+        connection.execute(version_table.insert().values(version_num=version))
     return {'restored_rows':count,'notice':'Requer a mesma chave de criptografia da origem para abrir segredos e anexos.'}
 
 

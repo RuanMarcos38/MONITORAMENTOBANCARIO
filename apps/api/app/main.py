@@ -232,3 +232,6 @@ def export(kind: str, user: Actor, db: Db):
 
 from .features import router as features_router
 app.include_router(features_router)
+
+from .middleware import RequestBodyLimit
+app.add_middleware(RequestBodyLimit)

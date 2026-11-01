@@ -22,7 +22,7 @@ def parse_file(filename, raw):
         statement = OfxParser.parse(io.BytesIO(raw), fail_fast=True)
         rows = []
         for account in statement.accounts:
-            account_hash = hashlib.sha256((str(account.routing_number)+':'+str(account.account_id)).encode()).hexdigest()[:20]
+            account_hash = hashlib.sha256((str(getattr(account,'routing_number',''))+':'+str(account.account_id)).encode()).hexdigest()[:20]
             for tx in account.statement.transactions:
                 if not tx.id:
                     raise ValueError('Transação OFX sem FITID')
