@@ -10,6 +10,7 @@ async function login(page: Page, who = 'analyst') {
 }
 
 async function navigate(page: Page, title: string) {
+  await expect(page.getByRole('button', {name:'Atualizar painel',exact:true})).toBeVisible();
   const menu = page.getByRole('button', { name: 'Abrir menu', exact: true });
   if (await menu.isVisible()) await menu.click();
   await page.getByRole('navigation').getByRole('button', { name: title, exact: true }).click();
@@ -65,3 +66,4 @@ test('visualizador de outra organização não acessa caso privado nem grava dad
   const response = await page.request.post('/api/v1/investigations',{data:{title:'Tentativa não autorizada',note:'Não deve criar este registro.'}});
   expect(response.status()).toBe(403);
 });
+
