@@ -11,6 +11,7 @@ pyotp>=2.9,<3
 reportlab>=4,<5
 pytest>=8,<10
 
-cryptography>=44,<50
+cryptography>=50,<51
 ofxparse>=0.21,<1
 defusedxml>=0.7,<1
+

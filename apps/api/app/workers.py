@@ -104,3 +104,19 @@ def execute(key):
             job.updated=now()
             db.commit()
             return {'failed':True,'state':job.state}
+
+@celery.task(name='bankguard.backup')
+def backup_database():
+    if os.getenv('BACKUP_ENABLED')!='true':
+        return {'enabled':False}
+    from .backup import backup_to, verified_frames
+    from pathlib import Path
+    target=Path(os.getenv('BACKUP_DIR','/data/backups'))/('bankguard-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'.enc')
+    result=backup_to(target)
+    result['verified_rows']=sum(1 for _ in verified_frames(target))
+    with DB() as db:
+        db.add(Record(org='system',kind='backup_history',external_id=target.name,data=result))
+        db.commit()
+    return {'verified':result['rows']==result['verified_rows']}
+
+celery.conf.beat_schedule['daily-encrypted-backup']={'task':'bankguard.backup','schedule':86400.0}

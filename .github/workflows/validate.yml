@@ -66,3 +66,34 @@ jobs:
       - run: pip install -r apps/api/requirements.txt
       - run: python -m app.source_probe
         working-directory: apps/api
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:////tmp/bankguard_e2e.db
+      BANKGUARD_CI: '1'
+      PUBLIC_ORIGIN: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: pip install -r apps/api/requirements.txt
+      - run: python -c "from cryptography.fernet import Fernet; import os; f=open(os.environ['GITHUB_ENV'],'a'); f.write('BANKGUARD_ENCRYPTION_KEY='+Fernet.generate_key().decode()+'\n'); f.close()"
+      - run: alembic upgrade head && python -m app.e2e_seed
+        working-directory: apps/api
+      - run: npm install -g pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: pnpm exec playwright test
+        working-directory: apps/web
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-diagnostics
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7

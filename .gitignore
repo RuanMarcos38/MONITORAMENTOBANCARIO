@@ -158,3 +158,6 @@ __pycache__/
 backups/
 
 .test-deps/
+
+playwright-report/
+test-results/

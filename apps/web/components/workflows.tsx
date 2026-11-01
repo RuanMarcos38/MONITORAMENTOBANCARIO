@@ -29,7 +29,7 @@ function Bars({ title, data }: { title: string; data: Record<string, number> }) 
   return <section className="card"><h2>{title}</h2>{Object.keys(data).length ? Object.entries(data).map(([name, value]) => <div className="bar-row" key={name}><span>{name}</span><div className="bar-track"><i style={{ width: `${value / maximum * 100}%` }}/></div><b>{value.toLocaleString('pt-BR')}</b></div>) : <p>Sem dados suficientes para este gráfico.</p>}</section>;
 }
 
-export function Workflows({ page, user, onChange }: { page: string; user: Row; onChange: () => void }) {
+export function Workflows({ page, user, onChange, updated }: { page: string; user: Row; onChange: () => void; updated: number }) {
   const [data, setData] = useState<Row[]>([]);
   const [extra, setExtra] = useState<Row>({});
   const [selected, setSelected] = useState<Row | null>(null);
@@ -48,7 +48,7 @@ export function Workflows({ page, user, onChange }: { page: string; user: Row; o
     const path = recordKinds.includes(page) ? `records/${page}?page=${offset}&size=25&q=${encodeURIComponent(query)}` : page === 'risk' ? 'analytics' : page === 'relationships' ? 'relationships/graph' : page === 'users' ? 'users' : page === 'plans' ? 'plans' : page === 'operations' ? 'jobs' : 'organization';
     api(path).then(result => { if (active) { if (Array.isArray(result)) { setData(result); setExtra({}); } else { setExtra(result); setData([]); } } }).catch(cause => active && setError(cause.message)).finally(() => active && setBusy(false));
     return () => { active = false; };
-  }, [page, offset, query, refresh]);
+  }, [page, offset, query, refresh, updated]);
   async function action(path: string, payload?: unknown) { setError(''); try { const result = await post(path, payload); setMessage('Operação concluída.'); reload(); return result; } catch (cause) { setError((cause as Error).message); } }
   async function open(row: Row) { if (page === 'investigations') { try { setSelected(await api(`investigations/${row.id}`)); } catch (cause) { setError((cause as Error).message); } } else setSelected(row); }
   const afterSave = () => { setMessage('Registro salvo.'); reload(); };
